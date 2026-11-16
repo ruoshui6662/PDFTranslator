@@ -1,0 +1,2 @@
+# PDFTranslator
+PDFTranslator for mac
