@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 "$ROOT_DIR/Scripts/build-app.sh" release
 
 DMG_STAGING="$ROOT_DIR/build/dmg-staging"
-DMG_OUTPUT="$ROOT_DIR/build/PDFTranslator-1.0.0.dmg"
+DMG_OUTPUT="$ROOT_DIR/build/PDFTranslator-0.0.1.dmg"
 
 rm -rf "$DMG_STAGING" "$DMG_OUTPUT"
 mkdir -p "$DMG_STAGING"

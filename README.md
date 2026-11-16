@@ -62,7 +62,7 @@ open build/PDFTranslator.app
 
 ```bash
 ./Scripts/build-dmg.sh
-# 输出：build/PDFTranslator-1.0.0.dmg
+# 输出：build/PDFTranslator-0.0.1.dmg
 ```
 
 ### 3. 命令行工具
