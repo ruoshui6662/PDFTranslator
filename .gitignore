@@ -1,0 +1,46 @@
+# Swift / Xcode
+.build/
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+.project
+.cmake-settings.json
+.swiftpm/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# App bundles & distributions
+*.app
+*.dmg
+*.zip
+*.tar.gz
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+
+# Personal test artifacts (not part of the project)
+geo_副本.pdf
+geo_副本-zh.pdf
+geo_副本-dual.pdf

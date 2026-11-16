@@ -1,0 +1,108 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "PDF 对照翻译" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF Bilingual Translator"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF 对照翻译"
+          }
+        }
+      }
+    },
+    "把 PDF 拖到这里，或粘贴链接" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop a PDF here, or paste a link"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把 PDF 拖到这里，或粘贴链接"
+          }
+        }
+      }
+    },
+    "原文件永不被修改 · 自动生成保留版式的译文版 (-zh.pdf) 与双语对照版 (-dual.pdf)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original files are never modified · Generates layout-preserving (-zh.pdf) and bilingual (-dual.pdf) PDFs"
+          }
+        }
+      }
+    },
+    "选择 PDF 文件 (⌘O)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose PDF File (⌘O)"
+          }
+        }
+      }
+    },
+    "试用示例论文" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Sample Paper"
+          }
+        }
+      }
+    },
+    "最近文档" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent Documents"
+          }
+        }
+      }
+    },
+    "导出" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export"
+          }
+        }
+      }
+    },
+    "取消" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "在访达中显示" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show in Finder"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
