@@ -41,6 +41,8 @@ fastlane/Preview.html
 fastlane/screenshots
 
 # Personal test artifacts (not part of the project)
+*.pdf
+!App/Resources/*.pdf
 geo_副本.pdf
 geo_副本-zh.pdf
 geo_副本-dual.pdf

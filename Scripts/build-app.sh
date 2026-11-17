@@ -37,11 +37,18 @@ if [ -f "$ROOT_DIR/App/Resources/Localizable.xcstrings" ]; then
     cp "$ROOT_DIR/App/Resources/Localizable.xcstrings" "$APP_BUNDLE/Contents/Resources/zh-Hans.lproj/Localizable.xcstrings"
 fi
 
-# Copy app icon
+# Copy app icon. macOS resolves CFBundleIconFile against the .icns file (an .iconset
+# bundle is only an iconutil intermediate and renders as a blank image), so the plist
+# must keep pointing at "AppIcon".
 if [ -f "$ROOT_DIR/App/Resources/AppIcon.icns" ]; then
     cp "$ROOT_DIR/App/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
-    # Update Info.plist to reference the icon
-    /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+
+    # Update Info.plist to reference the icns file
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "$APP_BUNDLE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIcons dict" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon dict" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFile AppIcon" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
 fi
 
 # Sign app bundle

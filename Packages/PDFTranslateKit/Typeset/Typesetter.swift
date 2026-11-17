@@ -103,6 +103,9 @@ public struct Typesetter: Sendable {
         for idx in 0..<page.paragraphs.count {
             page.paragraphs[idx].layout = computedLayouts[idx]
         }
+
+        // Fix overlapping paragraphs in two-column layouts
+        fixOverlappingParagraphs(&page)
     }
 
     /// Typesets a single paragraph, adjusting line height from 1.5 -> 1.4, then shrinking font size in 5% steps
@@ -501,20 +504,266 @@ public struct Typesetter: Sendable {
         let pageFloor = max(page.mediaBox.minY + 24.0, currentBox.minY - max(18.0, currentBox.height * 0.25))
         var highestObstacleBelow = pageFloor
 
-        // Check other paragraphs and regions in the same horizontal column range
+        // Check already-laid-out paragraphs below the current one in the SAME COLUMN.
+        // Only consider paragraphs whose horizontal range overlaps significantly AND are on the same side of page.
+        let currentIsLeft = currentBox.midX < page.mediaBox.midX
         for (otherIdx, otherPara) in page.paragraphs.enumerated() where otherIdx != index {
+            // Must be in same column
+            let otherIsLeft = otherPara.box.midX < page.mediaBox.midX
+            guard otherIsLeft == currentIsLeft else { continue }
+
             let horizontalOverlap = min(currentBox.maxX, otherPara.box.maxX) - max(currentBox.minX, otherPara.box.minX)
-            if horizontalOverlap > 6.0 && otherPara.box.midY < currentBox.midY && otherPara.box.maxY <= currentBox.minY + 8.0 {
-                highestObstacleBelow = max(highestObstacleBelow, otherPara.box.maxY + 2.5)
-            }
-        }
-        for region in page.regions where !region.kind.isTranslatable {
-            let horizontalOverlap = min(currentBox.maxX, region.box.maxX) - max(currentBox.minX, region.box.minX)
-            if horizontalOverlap > 6.0 && region.box.midY < currentBox.midY && region.box.maxY <= currentBox.minY + 8.0 {
-                highestObstacleBelow = max(highestObstacleBelow, region.box.maxY + 2.5)
-            }
+            if horizontalOverlap <= 6.0 { continue }
+            let otherBottom = otherPara.layout.map(\.expandedBox.minY) ?? otherPara.box.minY
+            // only consider paragraphs whose top is below our box top (i.e., physically below us)
+            guard otherPara.box.maxY < currentBox.minY else { continue }
+            // paragraph must be within a reasonable distance (up to ~2 source lines below)
+            guard otherBottom <= currentBox.minY + currentBox.height * 1.5 else { continue }
+            highestObstacleBelow = max(highestObstacleBelow, otherBottom + 2.5)
         }
         return min(currentBox.minY, highestObstacleBelow)
+    }
+
+    /// Expands a paragraph's `expandedBox` downward into available whitespace between it and the next paragraph.
+    /// Also adjusts font size / line height if expanding alone doesn't give enough room.
+    private func expandBoxIntoWhitespaceIfNeeded(
+        _ para: inout ParagraphIR,
+        layout: inout TypesetResult,
+        nextPara: ParagraphIR?,
+        pageMediaBox: CGRect
+    ) {
+        let currentBottom = layout.expandedBox.minY
+        let contentHeight = layout.expandedBox.height
+        var nextTop: CGFloat
+
+        if let next = nextPara, let nextLayout = next.layout {
+            // Ensure gap even if layout hasn't been written back yet
+            nextTop = nextLayout.expandedBox.minY
+        } else {
+            nextTop = pageMediaBox.minY + 24.0
+        }
+
+        let gap = nextTop - currentBottom
+        // Only expand if there's whitespace below the paragraph (gap > 0 means there's room)
+        guard gap > 0 else { return }
+        // Don't need expansion if already comfortable gap (>= 4pt = ~half line at 8pt)
+        guard gap < 4.0 else { return }
+
+        // Try to expand box first (no font change needed)
+        let neededExtra = 4.0 - gap
+        let newBottom = currentBottom - neededExtra
+        if newBottom >= nextTop - 1.0 && newBottom >= pageMediaBox.minY + 12.0 {
+            layout.expandedBox = CGRect(
+                x: layout.expandedBox.minX,
+                y: newBottom,
+                width: layout.expandedBox.width,
+                height: contentHeight + neededExtra
+            )
+            return
+        }
+
+        // If box expansion alone isn't enough, also tighten line-height
+        let currentLH = layout.lineHeightMultiple
+        if currentLH > configuration.minLineHeightMultiple {
+            let newLH = max(configuration.minLineHeightMultiple, currentLH - 0.05)
+            let lhSavings = (currentLH - newLH) / currentLH
+            let tightBottom = currentBottom - contentHeight * lhSavings
+            let finalBottom = max(tightBottom, newBottom)
+            layout.expandedBox = CGRect(
+                x: layout.expandedBox.minX,
+                y: finalBottom,
+                width: layout.expandedBox.width,
+                height: contentHeight + (currentBottom - finalBottom)
+            )
+            layout.lineHeightMultiple = newLH
+        }
+    }
+
+    /// Post-process: fix any overlapping paragraphs on the page.
+    ///
+    /// In two-column layouts, paragraphs from adjacent columns can have overlapping X-ranges and end up with
+    /// negative Y-gaps. We iterate through pairs of same-column paragraphs that are adjacent in reading order
+    /// (either original paragraph order or Y-sorted order within each column) and resolve overlaps by
+    /// nudging them apart into available whitespace.
+    private func fixOverlappingParagraphs(_ page: inout PageIR) {
+        let pageMidX = page.mediaBox.midX
+        let pageFloor = page.mediaBox.minY + 24.0
+
+        /// Find the Y-sorted position of a paragraph index within its column
+        func sortedYPosition(of idx: Int) -> Int {
+            let sorted = page.paragraphs.indices.sorted { a, b in
+                let aBottom = page.paragraphs[a].layout?.expandedBox.minY ?? page.paragraphs[a].box.minY
+                let bBottom = page.paragraphs[b].layout?.expandedBox.minY ?? page.paragraphs[b].box.minY
+                return aBottom < bBottom
+            }
+            return sorted.firstIndex(of: idx) ?? idx
+        }
+
+        /// Get the next same-column paragraph after idx in Y-sorted order
+        func nextSameColumnParagraph(after idx: Int) -> Int? {
+            let sorted = page.paragraphs.indices.sorted { a, b in
+                let aBottom = page.paragraphs[a].layout?.expandedBox.minY ?? page.paragraphs[a].box.minY
+                let bBottom = page.paragraphs[b].layout?.expandedBox.minY ?? page.paragraphs[b].box.minY
+                return aBottom < bBottom
+            }
+            guard let pos = sorted.firstIndex(of: idx), pos < sorted.count - 1 else { return nil }
+            let nextIdx = sorted[pos + 1]
+            let nextIsLeft = page.paragraphs[nextIdx].box.midX < pageMidX
+            let currentIsLeft = page.paragraphs[idx].box.midX < pageMidX
+            guard nextIsLeft == currentIsLeft else { return nil }
+            return nextIdx
+        }
+
+        /// Get the previous same-column paragraph before idx in Y-sorted order
+        func prevSameColumnParagraph(before idx: Int) -> Int? {
+            let sorted = page.paragraphs.indices.sorted { a, b in
+                let aBottom = page.paragraphs[a].layout?.expandedBox.minY ?? page.paragraphs[a].box.minY
+                let bBottom = page.paragraphs[b].layout?.expandedBox.minY ?? page.paragraphs[b].box.minY
+                return aBottom < bBottom
+            }
+            guard let pos = sorted.firstIndex(of: idx), pos > 0 else { return nil }
+            let prevIdx = sorted[pos - 1]
+            let prevIsLeft = page.paragraphs[prevIdx].box.midX < pageMidX
+            let currentIsLeft = page.paragraphs[idx].box.midX < pageMidX
+            guard prevIsLeft == currentIsLeft else { return nil }
+            return prevIdx
+        }
+
+        func tryFixPair(_ lowerIdx: Int, _ upperIdx: Int) -> Bool {
+            let lowerPara = page.paragraphs[lowerIdx]
+            let upperPara = page.paragraphs[upperIdx]
+
+            guard let lowerLayout = lowerPara.layout else { return false }
+            guard let upperLayout = upperPara.layout else { return false }
+
+            let lowerBottom = lowerLayout.expandedBox.minY
+            let upperTop = upperLayout.expandedBox.minY
+            let overlap = max(0.0, lowerBottom - upperTop)
+            guard overlap > 0.5 else { return false }
+
+            // Must be in the same column
+            let lowerIsLeft = lowerPara.box.midX < pageMidX
+            let upperIsLeft = upperPara.box.midX < pageMidX
+            guard lowerIsLeft == upperIsLeft else { return false }
+
+            // Check horizontal overlap
+            let hOverlap = min(lowerPara.box.maxX, upperPara.box.maxX) - max(lowerPara.box.minX, upperPara.box.minX)
+            guard hOverlap > 6.0 else { return false }
+
+            // Available whitespace above upper: space between upper's top and the paragraph above it
+            var whitespaceAboveUpper: CGFloat = 0
+            if let prevIdx = prevSameColumnParagraph(before: upperIdx) {
+                let prevP = page.paragraphs[prevIdx]
+                let prevBtm = prevP.layout?.expandedBox.minY ?? prevP.box.minY
+                whitespaceAboveUpper = max(0, upperTop - prevBtm - 2.0)
+            } else {
+                // No paragraph above — use space up to page top (but not below mediaBox)
+                let upperTopmost = upperPara.box.maxY - upperPara.box.height * 0.3
+                whitespaceAboveUpper = max(0, upperTop - upperTopmost)
+            }
+
+            // Available whitespace below lower: space between lower's bottom and the paragraph below it
+            var whitespaceBelowLower: CGFloat = 0
+            if let nextIdx = nextSameColumnParagraph(after: lowerIdx) {
+                let nextP = page.paragraphs[nextIdx]
+                let nextTop = nextP.layout?.expandedBox.minY ?? nextP.box.minY
+                whitespaceBelowLower = max(0, nextTop - lowerBottom - 2.0)
+            } else {
+                // No paragraph below — use space down to page floor
+                whitespaceBelowLower = max(0, lowerBottom - pageFloor)
+            }
+
+            let halfOverlap = overlap * 0.5
+
+            if whitespaceBelowLower >= halfOverlap {
+                let shiftDown = min(halfOverlap, whitespaceBelowLower)
+                var mutableLower = lowerPara
+                if var ll = mutableLower.layout {
+                    ll.expandedBox = CGRect(
+                        x: ll.expandedBox.minX,
+                        y: ll.expandedBox.minY - shiftDown,
+                        width: ll.expandedBox.width,
+                        height: ll.expandedBox.height + shiftDown
+                    )
+                    mutableLower.layout = ll
+                    page.paragraphs[lowerIdx] = mutableLower
+                    return true
+                }
+            } else if whitespaceAboveUpper >= halfOverlap {
+                let shiftUp = min(halfOverlap, whitespaceAboveUpper)
+                var mutableUpper = upperPara
+                if var ul = mutableUpper.layout {
+                    ul.expandedBox = CGRect(
+                        x: ul.expandedBox.minX,
+                        y: ul.expandedBox.minY + shiftUp,
+                        width: ul.expandedBox.width,
+                        height: ul.expandedBox.height - shiftUp
+                    )
+                    mutableUpper.layout = ul
+                    page.paragraphs[upperIdx] = mutableUpper
+                    return true
+                }
+            } else {
+                let nudge = min(halfOverlap, 1.5)
+                var mutableLower = lowerPara
+                if var ll = mutableLower.layout {
+                    ll.expandedBox = CGRect(
+                        x: ll.expandedBox.minX,
+                        y: ll.expandedBox.minY - nudge,
+                        width: ll.expandedBox.width,
+                        height: ll.expandedBox.height + nudge
+                    )
+                    mutableLower.layout = ll
+                    page.paragraphs[lowerIdx] = mutableLower
+                }
+                var mutableUpper = upperPara
+                if var ul = mutableUpper.layout {
+                    ul.expandedBox = CGRect(
+                        x: ul.expandedBox.minX,
+                        y: ul.expandedBox.minY + nudge,
+                        width: ul.expandedBox.width,
+                        height: ul.expandedBox.height - nudge
+                    )
+                    mutableUpper.layout = ul
+                    page.paragraphs[upperIdx] = mutableUpper
+                    return true
+                }
+            }
+            return false
+        }
+
+        var maxPasses = page.paragraphs.count * 3
+        while maxPasses > 0 {
+            maxPasses -= 1
+            var madeChange = false
+
+            // Pass 1: Original paragraph order (logical reading order)
+            for i in 0..<(page.paragraphs.count - 1) {
+                if tryFixPair(i, i + 1) {
+                    madeChange = true
+                }
+            }
+
+            // Pass 2: Y-sorted order within each column (catches column-based overlaps)
+            let sortedByY = page.paragraphs.indices.sorted { a, b in
+                let aBottom = page.paragraphs[a].layout?.expandedBox.minY ?? page.paragraphs[a].box.minY
+                let bBottom = page.paragraphs[b].layout?.expandedBox.minY ?? page.paragraphs[b].box.minY
+                return aBottom < bBottom
+            }
+            for i in 0..<(sortedByY.count - 1) {
+                let lowerIdx = sortedByY[i]
+                let upperIdx = sortedByY[i + 1]
+                let lowerIsLeft = page.paragraphs[lowerIdx].box.midX < pageMidX
+                let upperIsLeft = page.paragraphs[upperIdx].box.midX < pageMidX
+                if lowerIsLeft == upperIsLeft {
+                    if tryFixPair(lowerIdx, upperIdx) {
+                        madeChange = true
+                    }
+                }
+            }
+
+            if !madeChange { break }
+        }
     }
 
     public static func isCJKCharacter(_ ch: Character) -> Bool {
