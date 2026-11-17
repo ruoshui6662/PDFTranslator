@@ -54,4 +54,10 @@ fi
 # Sign app bundle
 codesign --force --sign - "$APP_BUNDLE"
 
+# Avoid polluting LaunchServices with a second registration for the same bundle id.
+# A build-directory copy can otherwise become the app Launchpad resolves, making the
+# real /Applications install disappear from the system app menu.
+LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+"$LSREG" -u "$APP_BUNDLE" >/dev/null 2>&1 || true
+
 echo "Successfully built macOS app bundle at: $APP_BUNDLE"

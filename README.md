@@ -62,8 +62,16 @@ open build/PDFTranslator.app
 
 ```bash
 ./Scripts/build-dmg.sh
-# 输出：build/PDFTranslator-0.0.1.dmg
+# 输出：build/PDFTranslator-1.0.dmg
 ```
+
+安装后如果「启动台」或系统「应用程序」菜单中看不到应用（Finder 的 `/Applications` 中可见、Spotlight 可搜索到），运行一次修复脚本：
+
+```bash
+./Scripts/fix-launchpad.sh
+```
+
+原因：重复安装/拖拽 DMG 会在 LaunchServices 数据库中残留同一 Bundle ID 的旧记录（废纸篓副本、已卸载的 DMG 卷、build 目录），导致系统解析到错误路径。该脚本会注销冲突记录、重新注册 `/Applications/PDFTranslator.app` 并重启 Dock。
 
 ### 3. 命令行工具
 
