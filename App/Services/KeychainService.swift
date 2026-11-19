@@ -39,7 +39,10 @@ public enum KeychainService {
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            // ad-hoc 签名没有稳定 Team ID，钥匙串无法记住应用信任，每次读取都会弹窗。
+            // 失败时返回 nil，由调用方降级为空密钥，不阻塞设置页与翻译任务。
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip
         ]
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
